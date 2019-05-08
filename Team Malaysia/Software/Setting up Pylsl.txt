@@ -1,0 +1,19 @@
+On Windows:
+
+1. open a cmd window with administrator rights
+2. go to your python install folder and in 'scripts' using the cd command
+	(probably C:\Users\yourname\AppData\Local\Programs\Python\Python37\Scripts)
+3. pip install pylsl
+
+tkinter library is already included in python!
+
+
+
+On Raspberry Pi:
+
+1. Pylsl-library download using $pip3 install pylsl 
+2. find folder /home/pi/.local/python3.5/pylsl 
+3. replace entire library with either liblsl_python or liblsl all language python
+4. liblsl-bcm2708.so from folder C_C++ rename to liblsl32.so and copy into python3.5
+
+https://github.com/pwnsauce8/ZSWI/wiki/using-pyLSL-module-on-raspbian
