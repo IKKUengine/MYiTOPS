@@ -1,0 +1,11 @@
+For Windows:
+
+Just download hamachi and install it.
+
+
+
+sudo systemctl enable pigpiod.service
+
+
+This makes the pigpio-deamon autostart every time.
+It must be running if you want to use pigpio library.

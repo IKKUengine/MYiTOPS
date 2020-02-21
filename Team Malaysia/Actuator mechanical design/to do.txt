@@ -1,2 +1,0 @@
-- clamp rear flat piece holes size
-- drawings

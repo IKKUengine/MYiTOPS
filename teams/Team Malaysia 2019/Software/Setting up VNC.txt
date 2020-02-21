@@ -1,0 +1,14 @@
+If there's no network which the Pi automatically connects to:
+
+1. Connect LAN cable between laptop and Pi
+2. Install and start network scanner
+3. Click options=>ip adress=>auto detect local IP range
+4. Look for IPv4 that is not WLAN, Hamachi, Virtual, Hotspot
+5. Remember this (your own) IP (e.g. 169.254.13.193) and close window.
+6. At "IPv4 From" enter the first three blocks and a zero (196.254.13.0)
+7. At "To" enter the first three blocks and 255 (169.254.13.255)
+8. On the right, click start scanning.
+9. After maximum 30 seconds you'll find your own IP and another one. That's the Pi
+10. (Install and) Open VNC and enter the Pi's IP. It'll ask for name and password.
+11. User is "pi" and password is "Hallo1234" right now
+
