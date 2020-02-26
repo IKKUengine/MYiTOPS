@@ -371,8 +371,7 @@ if __name__ == "__main__":
                 MYiTOPS.setExit()
                 
     def motorThread():
-        while MYiTOPS.getExit():
-            
+        while MYiTOPS.getExit()          
             try:
                 time.sleep(0.2)
                 if MYiTOPS.getDriveMotor() == False:
