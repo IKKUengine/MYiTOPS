@@ -2,20 +2,44 @@
 KY040 Code form Martin O'Hanlon and Conrad Storz 
 stuffaboutcode.com
 
-Additional code added by Ferhat Aslan (University of Applied Science)
-"""
+ULN2003A Code of stepper from Ingmar Stapel
+https://github.com/custom-build-robots/Stepper-motor-28BYJ-48-Raspberry-Pi/blob/master/decision-maker.py
 
+MYiTOPS Code by Ferhat Aslan (University of Applied Science)
+"""
 '''
-Please enter the IP address of the server here. Change the transfer rate if desired.
+Please enter the IP address of the server and the name of the client here. Change the transfer rate if desired.
 '''
-ipAdress = '192.168.178.20'
+
+ClIENTNAME = "MYiTOPS Client V2"
+ipAdress = '192.168.178.24'
 # value in seconds
-TRANSFERRATE = 0.2
+TRANSFERRATE = 0.5#0.2
+# Waiting time for the speed of stepper motor
+STEPPERTIME = 0.001
+
+#GBIO Pins 
+CLOCKPIN = 27
+DATAPIN = 22
+SWITCHPIN = 17
+PUSHBUTTON1 = 5
+PUSHBUTTON2 = 6
+LED1 = 12        #Green
+LED2 = 25        #Red
+
+# Used pins of the ULN2003A
+IN1=13 # IN1
+IN2=24 # IN2
+IN3=18 # IN3
+IN4=23 # IN4
 
 import RPi.GPIO as GPIO
 import socket
 from PySide import QtNetwork, QtCore, QtGui
 import time
+import threading
+import re
+
 GPIO.setmode(GPIO.BCM)
 
 class Stopping:
@@ -35,10 +59,10 @@ class MYiTOPS:
 
     CLOCKWISE = 0
     ANTICLOCKWISE = 1
-    DEBOUNCE = 20
+    DEBOUNCE = 60
 
-    def __init__(self, clockPin, dataPin, switchPin, laverSwitchPin, pushbutton1Pin, pushbutton2Pin,
-                 led1Pin, led2Pin, led3Pin, led4Pin, led5Pin, rotaryCallback, switchCallback,
+    def __init__(self, clockPin, dataPin, switchPin, pushbutton1Pin, pushbutton2Pin,
+                 led1Pin, led2Pin, in1, in2, in3, in4, rotaryCallback, switchCallback,
                  pushbutton1Callback, pushbutton2Callback):    
         #persist values
         self.clockPin = clockPin
@@ -46,20 +70,23 @@ class MYiTOPS:
         self.switchPin = switchPin
         self.rotaryCallback = rotaryCallback
         self.switchCallback = switchCallback
-        self.laverSwitchPin = laverSwitchPin
         self.pushbutton1Pin = pushbutton1Pin
         self.pushbutton2Pin = pushbutton2Pin
         self.led1Pin = led1Pin
         self.led2Pin = led2Pin
-        self.led3Pin = led3Pin
-        self.led4Pin = led4Pin
-        self.led5Pin = led5Pin
+        self.in1 = in1
+        self.in2 = in2
+        self.in3 = in3
+        self.in4 = in4
         self.pushbutton1Callback = pushbutton1Callback
         self.pushbutton2Callback = pushbutton2Callback
         self.volume = 0
+        self.runningMotor = 0
         self.push1 = False
         self.push2 = False
-        self.laverSwitch = 0
+        self.dirMotor = False
+        self.stepperSteps = 0
+        self.motorDrive = False
 
         self.loop = True
 
@@ -67,19 +94,104 @@ class MYiTOPS:
         GPIO.setup(clockPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(dataPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(switchPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        
-        GPIO.setup(laverSwitchPin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+
         GPIO.setup(pushbutton1Pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         GPIO.setup(pushbutton2Pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         
         GPIO.setup(led1Pin, GPIO.OUT)
         GPIO.setup(led2Pin, GPIO.OUT)
-        GPIO.setup(led3Pin, GPIO.OUT)
-        GPIO.setup(led4Pin, GPIO.OUT)
-        GPIO.setup(led5Pin, GPIO.OUT)
+        
+        GPIO.setup(in1,GPIO.OUT)
+        GPIO.setup(in2,GPIO.OUT)
+        GPIO.setup(in3,GPIO.OUT)
+        GPIO.setup(in4,GPIO.OUT)
+    #----------------------Stepper Begin----------------------------
+    
+    # The 28BYJ-48 stepper motor is designed so that the motor is
+    # Inside 8 steps needed for one turn. Through the operations
+    # but it takes 512 x 8 steps for the axis to rotate once
+    # So turns itself 360°
+
+    # Definition of steps 1 - 8 via pins IN1 to IN4
+    # Between each movement of the motor is waited for a short time so that the
+    # Motor anchor reaching its position.
+    
+    def Step1(self):
+        GPIO.output(IN4, True)
+        time.sleep(STEPPERTIME)
+        GPIO.output(IN4, False)
+
+    def Step2(self):
+        GPIO.output(IN4, True)
+        GPIO.output(IN3, True)
+        time.sleep(STEPPERTIME)
+        GPIO.output(IN4, False)
+        GPIO.output(IN3, False)
+
+    def Step3(self):
+        GPIO.output(IN3, True)
+        time.sleep(STEPPERTIME)
+        GPIO.output(IN3, False)
+
+    def Step4(self):
+        GPIO.output(IN2, True)
+        GPIO.output(IN3, True)
+        time.sleep(STEPPERTIME)
+        GPIO.output(IN2, False)
+        GPIO.output(IN3, False)
+
+    def Step5(self):
+        GPIO.output(IN2, True)
+        time.sleep(STEPPERTIME)
+        GPIO.output(IN2, False)
+
+    def Step6(self):
+        GPIO.output(IN1, True)
+        GPIO.output(IN2, True)
+        time.sleep(STEPPERTIME)
+        GPIO.output(IN1, False)
+        GPIO.output(IN2, False)
+
+    def Step7(self):
+        GPIO.output(IN1, True)
+        time.sleep(STEPPERTIME)
+        GPIO.output(IN1, False)
+
+    def Step8(self):
+        GPIO.output(IN4, True)
+        GPIO.output(IN1, True)
+        time.sleep(STEPPERTIME)
+        GPIO.output(IN4, False)
+        GPIO.output(IN1, False)
+ 
+    def left(self, steps):
+        for i in range (steps): 
+            self.Step1()
+            self.Step2()
+            self.Step3()
+            self.Step4()
+            self.Step5()
+            self.Step6()
+            self.Step7()
+            self.Step8()
+        print ("Steps left: ", steps) 
+       
+    def right(self, steps):
+        for i in range (steps):  
+            self.Step8()
+            self.Step7()
+            self.Step6()
+            self.Step5()
+            self.Step4()
+            self.Step3()
+            self.Step2()
+            self.Step1()  
+        print ("Steps right: ", steps) 
+        
+    #--------------------Stepper End--------------------------------
     
     def getValues(self):
-        return str(self.laverSwitch) + ", '"+ str(self.push1)+ "', '" + str(self.push2) + "', "+ str(self.volume)
+        return str(self.runningMotor) + ", '"+ str(self.push1)+ "', '" + str(self.push2) + "', "+ str(self.volume)
 
     def start(self):
         GPIO.add_event_detect(self.clockPin, GPIO.FALLING, callback=self._clockCallback, bouncetime=self.DEBOUNCE)
@@ -111,21 +223,19 @@ class MYiTOPS:
         print (self.volume)
         #self.switchCallback(pin)
         
-    def getLaverSwitch(self):
-        self.laverSwitch = GPIO.input(self.laverSwitchPin)
-        return self.laverSwitch
+    def getStepperSteps(self, steps):
+        #self.stepsStepper = GPIO.input(self.laverSwitchPin)
+        return self.stepsStepper
  
         
     def _pushbutton1Callback(self, pin):
-        if not GPIO.input(self.laverSwitchPin):
-            self.pushbutton1Callback(pin)
         self.push1 = not self.push1
-        #print(self.push1)
+        print(self.push1)
 
     def _pushbutton2Callback(self, pin):
         #self.pushbutton2Callback(pin)
         self.push2 = not self.push2
-        #print(self.push2)
+        print(self.push2)
         
     def setLed1(self, on):
         if on: 
@@ -138,24 +248,39 @@ class MYiTOPS:
             GPIO.output(self.led2Pin, GPIO.HIGH)
         else:
             GPIO.output(self.led2Pin, GPIO.LOW)
+         
+    def setDriveMotor(self, on):
+        if on: 
+            self.motorDrive = True
+        else:
+            self.motorDrive = False
     
-    def setLed3(self, on):
-        if on: 
-            GPIO.output(self.led3Pin, GPIO.HIGH)
+    def getDriveMotor(self):
+        return self.motorDrive
+    
+    def setStepperSteps(self, steps):
+        self.stepperSteps = steps
+        
+    def setRunningMotor(self, on):
+        self.runningMotor = on
+        
+    def getStepperSteps(self):
+        return self.stepperSteps 
+        
+    def setDirecionMotor(self, dir):
+        if dir == 0: 
+            self.dirMotor = True
         else:
-            GPIO.output(self.led3Pin, GPIO.LOW)
-            
-    def setLed4(self, on):
+            self.dirMotor = False
+
+    def getDirecionMotor(self):
+        return self.dirMotor
+        
+    def setStoppAppClient(self, on):
         if on: 
-            GPIO.output(self.led4Pin, GPIO.HIGH)
+            self.setExit()
         else:
-            GPIO.output(self.led4Pin, GPIO.LOW)
-            
-    def setLed5(self, on):
-        if on: 
-            GPIO.output(self.led5Pin, GPIO.HIGH)
-        else:
-            GPIO.output(self.led5Pin, GPIO.LOW)
+            pass
         
     def setExit(self):
         print("exit")
@@ -172,18 +297,6 @@ if __name__ == "__main__":
 
     print ('Program start.')
 
-    CLOCKPIN = 27
-    DATAPIN = 22
-    SWITCHPIN = 17
-    LAVERSWITCH = 13
-    PUSHBUTTON1 = 6
-    PUSHBUTTON2 = 5
-    LED1 = 18
-    LED2 = 23
-    LED3 = 24
-    LED4 = 25
-    LED5 = 12
-
     def rotaryChange(direction):
         print ("turned - " + str(direction))
     def switchPressed(pin):
@@ -199,7 +312,7 @@ if __name__ == "__main__":
         try:
             on = '1'
             off = '0'      
-            header = "'MYiTOPS-RPI-Client 3' ('Laver Switch', 'Push Button 1', 'Push Button 2', 'Encoder Volume') VALUES "
+            header = "'{}' ('Steps Stepper', 'Push Button 1', 'Push Button 2', 'Encoder Volume') VALUES ".format(ClIENTNAME)
             message = "{} ({})".format(header, values)
             #message = "E5"
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -217,177 +330,99 @@ if __name__ == "__main__":
             into = QtCore.QDataStream(block2, QtCore.QIODevice.ReadWrite)
             into.setVersion(QtCore.QDataStream.Qt_4_0)
             message = s.recv(1024)
-            byteMessageList = list(message.decode('ascii'))
-            strMessage = ''.join(str(x) for x in byteMessageList)
-            #print(byteMessageList)
-            #print(byteMessageList[5] + byteMessageList[7])
-            #print(strMessage)
+            
             s.close()
             return message
         except:
-               print ("NO Connection to etaNet. Please check your connection to server!")
-    
-    def knightRider(counter):
-        try:          
-            if(Exit.getRider()):
-                if(counter == 0):
-                    MYiTOPS.setLed1(True)
-                    MYiTOPS.setLed2(False)
-                    MYiTOPS.setLed3(False)
-                    MYiTOPS.setLed4(False)
-                    MYiTOPS.setLed5(False)
-                elif(counter == 1):
-                    MYiTOPS.setLed1(True)
-                    MYiTOPS.setLed2(True)
-                    MYiTOPS.setLed3(False)
-                    MYiTOPS.setLed4(False)
-                    MYiTOPS.setLed5(False)
-                elif(counter == 2):
-                    MYiTOPS.setLed1(True)
-                    MYiTOPS.setLed2(True)
-                    MYiTOPS.setLed3(True)
-                    MYiTOPS.setLed4(False)
-                    MYiTOPS.setLed5(False)
-                elif(counter == 3):
-                    MYiTOPS.setLed1(False)
-                    MYiTOPS.setLed2(True)
-                    MYiTOPS.setLed3(True)
-                    MYiTOPS.setLed4(True)
-                    MYiTOPS.setLed5(False)
-                elif(counter == 4):
-                    MYiTOPS.setLed1(False)
-                    MYiTOPS.setLed2(False)
-                    MYiTOPS.setLed3(True)
-                    MYiTOPS.setLed4(True)
-                    MYiTOPS.setLed5(True)
-                elif(counter == 5):
-                    MYiTOPS.setLed1(False)
-                    MYiTOPS.setLed2(False)
-                    MYiTOPS.setLed3(False)
-                    MYiTOPS.setLed4(True)
-                    MYiTOPS.setLed5(True)
-                elif(counter == 6):
-                    MYiTOPS.setLed1(False)
-                    MYiTOPS.setLed2(False)
-                    MYiTOPS.setLed3(False)
-                    MYiTOPS.setLed4(False)
-                    MYiTOPS.setLed5(True)
-                elif(counter == 7):
-                    MYiTOPS.setLed1(False)
-                    MYiTOPS.setLed2(False)
-                    MYiTOPS.setLed3(False)
-                    MYiTOPS.setLed4(True)
-                    MYiTOPS.setLed5(True)
-                elif(counter == 8):
-                    MYiTOPS.setLed1(False)
-                    MYiTOPS.setLed2(False)
-                    MYiTOPS.setLed3(True)
-                    MYiTOPS.setLed4(True)
-                    MYiTOPS.setLed5(True)
-                elif(counter == 9):
-                    MYiTOPS.setLed1(False)
-                    MYiTOPS.setLed2(True)
-                    MYiTOPS.setLed3(True)
-                    MYiTOPS.setLed4(True)
-                    MYiTOPS.setLed5(False)
-                elif(counter == 10):
-                    MYiTOPS.setLed1(True)
-                    MYiTOPS.setLed2(True)
-                    MYiTOPS.setLed3(True)
-                    MYiTOPS.setLed4(False)
-                    MYiTOPS.setLed5(False)
-                elif(counter == 11):
-                    MYiTOPS.setLed1(True)
-                    MYiTOPS.setLed2(True)
-                    MYiTOPS.setLed3(False)
-                    MYiTOPS.setLed4(False)
-                    MYiTOPS.setLed5(False)
-                elif(counter == 12):
-                    MYiTOPS.setLed1(True)
-                    MYiTOPS.setLed2(False)
-                    MYiTOPS.setLed3(False)
-                    MYiTOPS.setLed4(False)
-                    MYiTOPS.setLed5(False)
-        except:
-            print ("Knight Rider Thread stopped")
+            print ("NO Connection to etaNet. Please check your connection to server!")
     
     def networkThread():
-        try:
-            #print (MYiTOPS.getLaverSwitch() == 1 or once)
-            if((MYiTOPS.getLaverSwitch() == 1) or Exit.getOnce()):
-                if MYiTOPS.getLaverSwitch() == 1:
-                    Exit.setOnce(True)
-                    #print('once = True')
-                if MYiTOPS.getLaverSwitch() == 0:
-                    Exit.setOnce(False)
-                    #print('once = False')
-                
+        while MYiTOPS.getExit(): 
+            try:
+                byteMessageList = []
+                strMessageList = []
+                newList = []
                 data = comToServer(MYiTOPS.getValues())
                 #print (data)
+
                 byteMessageList = list(data.decode('ascii'))
-                parameter = len(byteMessageList)== 36
-                #print(parameter) 
+                strMessage = ''.join(str(x) for x in byteMessageList)
+                strMessageList = strMessage.split(";")
+                for i in strMessageList:
+                   newList.append( str(i.split(chr(0))).replace(' ', '').replace(',', '').replace(']', '').replace('[', '').replace("'", ''))
+                newList[0] = str(re.findall(r'\d+\.*\d*', newList[0])).replace("'", '').replace(']', '').replace('[', '')
                 
-                if byteMessageList[5] == 'E' and  byteMessageList[7] == '5':
+                if newList[0] == ('04, 5'):
+                    #print("E5")
                     pass
 
-                elif parameter:
-                    #print(int(byteMessageList[5]) == 1)
-                    Exit.setRider(int(byteMessageList[5]) == 1)
-                    if(int(byteMessageList[5]) == 0):
-                        MYiTOPS.setLed1(int(byteMessageList[11]))
-                        MYiTOPS.setLed2(int(byteMessageList[17]))
-                        MYiTOPS.setLed3(int(byteMessageList[23]))
-                        MYiTOPS.setLed4(int(byteMessageList[29]))
-                        MYiTOPS.setLed5(int(byteMessageList[35]))
+                elif len(newList)== 6:
+                    MYiTOPS.setStepperSteps(int(newList[0]))
+                    MYiTOPS.setLed1(int(newList[1]))
+                    MYiTOPS.setLed2(int(newList[2]))
+                    MYiTOPS.setDriveMotor(int(newList[3]))
+                    MYiTOPS.setDirecionMotor(int(newList[4]))
+                    MYiTOPS.setStoppAppClient(int(newList[5]))
+                
                 else:
                     print("Wrong message! Please check your conection.")
-        except:
-            print ("Communication via the network could not be started.")
-        
-MYiTOPS = MYiTOPS(CLOCKPIN, DATAPIN, SWITCHPIN, LAVERSWITCH, PUSHBUTTON1, PUSHBUTTON2, LED1, LED2, LED3, LED4, LED5,
-                  rotaryChange, switchPressed, pushbutton1, pushbutton2)
-Exit= Stopping(False, True)
+            except:
+                print ("Communication via the network could not be started.")
+                MYiTOPS.setExit()
+                
+    def motorThread():
+        while MYiTOPS.getExit():
+            
+            try:
+                time.sleep(0.2)
+                if MYiTOPS.getDriveMotor() == False:
+                    pass
+                    
+                else:
+                    MYiTOPS.setRunningMotor(1)
+                    if MYiTOPS.getDirecionMotor() == True:
+                        MYiTOPS.left(MYiTOPS.getStepperSteps())
+                    else:
+                        MYiTOPS.right(MYiTOPS.getStepperSteps())
+                    MYiTOPS.setRunningMotor(0)
 
+            except:
+                print ("Stepper Motor could not be started.")
+                MYiTOPS.setExit()
+        
+MYiTOPS = MYiTOPS(CLOCKPIN, DATAPIN, SWITCHPIN, PUSHBUTTON1, PUSHBUTTON2, LED1, LED2,
+                  IN1, IN2, IN3, IN4, rotaryChange, switchPressed, pushbutton1, pushbutton2)
+ 
+ 
 print ('MYiTOPS Remote Control Client.')
 
 MYiTOPS.start()
 
-timeBuffer = time.time()
-timeBuffer2 = timeBuffer
-counter = 0
 try:
     MYiTOPS.setLed1(True)
-    time.sleep(0.2)
+    MYiTOPS.setLed2(True)
+    time.sleep(0.3)
     MYiTOPS.setLed1(False)
     MYiTOPS.setLed2(True)
-    time.sleep(0.2)
+    time.sleep(0.3)
     MYiTOPS.setLed2(False)
-    MYiTOPS.setLed3(True)
-    time.sleep(0.2)
-    MYiTOPS.setLed3(False)
-    MYiTOPS.setLed4(True)
-    time.sleep(0.2)
-    MYiTOPS.setLed4(False)
-    MYiTOPS.setLed5(True)
-    time.sleep(0.2)
-    MYiTOPS.setLed5(False)
+    MYiTOPS.setLed1(True)
+    time.sleep(0.3)
+    MYiTOPS.setLed1(True)
+    MYiTOPS.setLed2(True)
+    time.sleep(0.3)
+    MYiTOPS.setLed1(False)
+    MYiTOPS.setLed2(False)
 
-    while MYiTOPS.getExit(): 
-        #print(time.time() - timeBuffer)
-        actual = time.time() - timeBuffer       
-        if(actual >= TRANSFERRATE):
-            timeBuffer = time.time()
-            networkThread()
-        knightRiderTime= time.time() - timeBuffer2
-        if(knightRiderTime >= 0.2):
-            timeBuffer2 = time.time()
-            knightRider(counter)
-            counter += 1
-            #print(counter)
-            if counter > 12:
-                counter = 0
-        
+    #Starting Client Threads
+    
+    sending = threading.Thread(target = networkThread)
+    motorRun = threading.Thread(target = motorThread)
+    motorRun.start()
+    sending.start()
+    sending.join()
+    motorRun.join()
+
 except:
     print ("Error: unable to start client")
     
