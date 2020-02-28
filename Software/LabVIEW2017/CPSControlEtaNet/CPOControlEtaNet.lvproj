@@ -10,7 +10,7 @@
 		<Property Name="server.vi.callsEnabled" Type="Bool">true</Property>
 		<Property Name="server.vi.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
-		<Item Name="CBSControlling.vi" Type="VI" URL="../CBSControlling.vi"/>
+		<Item Name="CPSControlling.vi" Type="VI" URL="../CPSControlling.vi"/>
 		<Item Name="DataHandlerMYiTOPS.lvclass" Type="LVClass" URL="../classes/DataHandlerMYiTOPS.lvclass"/>
 		<Item Name="PathDialog.vi" Type="VI" URL="../subvi/PathDialog.vi"/>
 		<Item Name="Dependencies" Type="Dependencies">
